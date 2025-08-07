@@ -1,12 +1,1 @@
-[submodule "UNO"]
-	path = UNO
-	url = https://github.com/bytedance/UNO.git
-[submodule "models/Bagel"]
-	path = models/Bagel
-	url = https://github.com/ByteDance-Seed/Bagel.git
-[submodule "models/OmniGen"]
-	path = models/OmniGen
-	url = https://github.com/VectorSpaceLab/OmniGen.git
-[submodule "models/OmniGen2"]
-	path = models/OmniGen2
-	url = https://github.com/VectorSpaceLab/OmniGen2.git
+
