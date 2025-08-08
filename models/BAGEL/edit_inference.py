@@ -476,11 +476,11 @@ def read_ann_file(ann_path):
 
 def main(args):
     if args.mode == 'syn':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/emu2'
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/bagel'
         ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
 
     elif args.mode =='real':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/emu2'
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/bagel'
         ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
         
     else:

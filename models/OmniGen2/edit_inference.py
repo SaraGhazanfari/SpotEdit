@@ -1,4 +1,4 @@
-import dotenv
+import dotenv, json
 
 dotenv.load_dotenv(override=True)
 
@@ -18,13 +18,22 @@ from omnigen2.pipelines.omnigen2.pipeline_omnigen2 import OmniGen2Pipeline
 from omnigen2.models.transformers.transformer_omnigen2 import OmniGen2Transformer2DModel
 
 
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="OmniGen2 image generation script.")
+    
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["real", "syn"],  # restrict allowed values
+        required=True
+    )
+    
     parser.add_argument(
         "--model_path",
         type=str,
-        required=True,
+        default='/scratch/sg7457/code/SpotEdit/saved_models/OmniGen2',
         help="Path to model checkpoint.",
     )
     parser.add_argument(
@@ -250,9 +259,9 @@ def preprocess(input_image_path: List[str] = []) -> Tuple[str, str, List[Image.I
 def run(args: argparse.Namespace, 
         accelerator: Accelerator, 
         pipeline: OmniGen2Pipeline, 
-        instruction: str, 
-        negative_prompt: str, 
-        input_images: List[Image.Image]) -> Image.Image:
+        instruction,
+        input_images: List,
+        negative_prompt) -> Image.Image:
     """Run the image generation pipeline with the given parameters."""
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
@@ -287,7 +296,7 @@ def create_collage(images: List[torch.Tensor]) -> Image.Image:
     
     return to_pil_image(canvas)
 
-def main(args: argparse.Namespace, root_dir: str) -> None:
+def main(args: argparse.Namespace, spotedit_list, root_out_image_path) -> None:
     """Main function to run the image generation process."""
     # Initialize accelerator
     accelerator = Accelerator(mixed_precision=args.dtype if args.dtype != 'fp32' else 'no')
@@ -301,24 +310,45 @@ def main(args: argparse.Namespace, root_dir: str) -> None:
 
     # Load pipeline and process inputs
     pipeline = load_pipeline(args, accelerator, weight_dtype)
-    input_images = preprocess(args.input_image_path)
+    start_idx = 0
+    for item_idx, item in enumerate(spotedit_list[start_idx:]):
+        
+        input_images = preprocess(item['image_list'][:2])
+        # Generate and save image
+        results = run(args, accelerator, pipeline, item['prompt'], input_images, args.negative_prompt)
+        output_image_path = os.path.join(root_out_image_path, str(item['id']), item['image_list'][-1].split('/')[-1])
 
-    # Generate and save image
-    results = run(args, accelerator, pipeline, args.instruction, args.negative_prompt, input_images)
-    os.makedirs(os.path.dirname(args.output_image_path), exist_ok=True)
+        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path)
 
-    if len(results.images) > 1:
-        for i, image in enumerate(results.images):
-            image_name, ext = os.path.splitext(args.output_image_path)
-            image.save(f"{image_name}_{i}{ext}")
+        if os.path.exists(output_image_path):
+            continue
 
-    vis_images = [to_tensor(image) * 2 - 1 for image in results.images]
-    output_image = create_collage(vis_images)
+        os.makedirs(os.path.dirname(output_image_path), exist_ok=True)
 
-    output_image.save(args.output_image_path)
-    print(f"Image saved to {args.output_image_path}")
+        vis_images = [to_tensor(image) * 2 - 1 for image in results.images]
+        output_image = create_collage(vis_images)
+
+        output_image.save(output_image_path)
+      
+    
+def read_ann_file(ann_path):
+    spotedit_list = list()
+    with open(ann_path) as file:
+        for line in file.readlines():
+            spotedit_list.append(json.loads(line))
+    return spotedit_list
 
 if __name__ == "__main__":
     root_dir = os.path.abspath(os.path.join(__file__, os.path.pardir))
     args = parse_args()
-    main(args, root_dir)
+    
+    if args.mode == 'syn':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/omnigen2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
+
+    elif args.mode =='real':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/omnigen2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
+        
+         
+    main(args, read_ann_file(ann_file), root_out_image_path=root_out_image_path)

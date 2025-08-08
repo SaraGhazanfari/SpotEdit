@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-import re
+import re, argparse
 
 
 def swap_words(sentence, word1, word2):
@@ -19,7 +19,7 @@ def swap_words(sentence, word1, word2):
 
 # For the first time of using,
 # you need to download the huggingface repo "BAAI/Emu2-GEN" to local first
-path = "/mnt/localssd/models/emu2/Emu2-Gen"
+path = "/scratch/sg7457/code/SpotEdit/saved_models/Emu2-Gen"
 
 multimodal_encoder = AutoModelForCausalLM.from_pretrained(
     f"{path}/multimodal_encoder",
@@ -83,11 +83,27 @@ def edit_image(spotedit_list, root_out_image_path):
         ret = pipe(input_images)
         ret.image.save(output_image_path)
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
 
-# syn_ann_file = '/home/colligo/SpotFrame/spotframe_benchmark_syn.jsonl'
-# syn_out_image_path = '/mnt/localssd/spot_edit/george_story/emu2_edited_videos'
-# edit_image(read_ann_file(syn_ann_file), root_out_image_path=syn_out_image_path)
+    # Define arguments
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["real", "syn"],  # restrict allowed values
+        required=True
+    )
+    args = parser.parse_args()
+    
+    if args.mode == 'syn':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/emu2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
 
-real_out_image_path = '/mnt/localssd/spot_edit/spotframe_real/emu2_edited_videos'
-real_ann_file = '/home/colligo/SpotFrame/spotframe_benchmark_real.jsonl'
-edit_image(read_ann_file(real_ann_file), root_out_image_path=real_out_image_path)
+    elif args.mode =='real':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/emu2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
+        
+    else:
+        raise Exception('Choose a valid mode!')
+        
+    edit_image(read_ann_file(ann_file), root_out_image_path=root_out_image_path)
