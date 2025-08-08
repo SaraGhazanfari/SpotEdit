@@ -10,7 +10,7 @@ import torch
 from data.data_utils import pil_img2rgb
 from modeling.bagel.qwen2_navit import NaiveCache
 
-
+import json, os
 
 VLM_THINK_SYSTEM_PROMPT = '''You should first think about the reasoning process in the mind and then provide the user with the answer. 
 The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here'''
@@ -295,7 +295,7 @@ class InterleaveInferencer:
 
         input_list = []
         if image is not None:
-            input_list.append(image)
+            input_list.extend(image)
         if text is not None:
             input_list.append(text)
 
@@ -307,3 +307,211 @@ class InterleaveInferencer:
             elif isinstance(i, str):
                 output_dict['text'] = i
         return output_dict
+
+
+import numpy as np
+import os
+import torch
+import random
+
+from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch, init_empty_weights
+from PIL import Image
+
+from data.data_utils import add_special_tokens, pil_img2rgb
+from data.transforms import ImageTransform
+
+from modeling.autoencoder import load_ae
+from modeling.bagel.qwen2_navit import NaiveCache
+from modeling.bagel import (
+    BagelConfig, Bagel, Qwen2Config, Qwen2ForCausalLM,
+    SiglipVisionConfig, SiglipVisionModel
+)
+from modeling.qwen2 import Qwen2Tokenizer
+
+import argparse
+from accelerate.utils import BnbQuantizationConfig, load_and_quantize_model
+
+
+
+# Model Initialization
+model_path = '/scratch/sg7457/code/SpotEdit/saved_models/BAGEL-7B-MoT'
+
+llm_config = Qwen2Config.from_json_file(os.path.join(model_path, "llm_config.json"))
+llm_config.qk_norm = True
+llm_config.tie_word_embeddings = False
+llm_config.layer_module = "Qwen2MoTDecoderLayer"
+
+vit_config = SiglipVisionConfig.from_json_file(os.path.join(model_path, "vit_config.json"))
+vit_config.rope = False
+vit_config.num_hidden_layers -= 1
+
+vae_model, vae_config = load_ae(local_path=os.path.join(model_path, "ae.safetensors"))
+
+config = BagelConfig(
+    visual_gen=True,
+    visual_und=True,
+    llm_config=llm_config, 
+    vit_config=vit_config,
+    vae_config=vae_config,
+    vit_max_num_patch_per_side=70,
+    connector_act='gelu_pytorch_tanh',
+    latent_patch_size=2,
+    max_latent_size=64,
+)
+
+with init_empty_weights():
+    language_model = Qwen2ForCausalLM(llm_config)
+    vit_model      = SiglipVisionModel(vit_config)
+    model          = Bagel(language_model, vit_model, config)
+    model.vit_model.vision_model.embeddings.convert_conv2d_to_linear(vit_config, meta=True)
+
+tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
+tokenizer, new_token_ids, _ = add_special_tokens(tokenizer)
+
+vae_transform = ImageTransform(1024, 512, 16)
+vit_transform = ImageTransform(980, 224, 14)
+
+# Model Loading and Multi GPU Infernece Preparing
+device_map = infer_auto_device_map(
+    model,
+    max_memory={i: "80GiB" for i in range(torch.cuda.device_count())},
+    no_split_module_classes=["Bagel", "Qwen2MoTDecoderLayer"],
+)
+
+same_device_modules = [
+    'language_model.model.embed_tokens',
+    'time_embedder',
+    'latent_pos_embed',
+    'vae2llm',
+    'llm2vae',
+    'connector',
+    'vit_pos_embed'
+]
+
+if torch.cuda.device_count() == 1:
+    first_device = device_map.get(same_device_modules[0], "cuda:0")
+    for k in same_device_modules:
+        if k in device_map:
+            device_map[k] = first_device
+        else:
+            device_map[k] = "cuda:0"
+else:
+    first_device = device_map.get(same_device_modules[0])
+    for k in same_device_modules:
+        if k in device_map:
+            device_map[k] = first_device
+
+model = load_checkpoint_and_dispatch(
+    model,
+    checkpoint=os.path.join(model_path, "ema.safetensors"),
+    device_map=device_map,
+    offload_buffers=True,
+    offload_folder="offload",
+    dtype=torch.bfloat16,
+    force_hooks=True,
+).eval()
+
+# Inferencer Preparing 
+inferencer = InterleaveInferencer(
+    model=model,
+    vae_model=vae_model,
+    tokenizer=tokenizer,
+    vae_transform=vae_transform,
+    vit_transform=vit_transform,
+    new_token_ids=new_token_ids,
+)
+
+
+def set_seed(seed):
+    """Set random seeds for reproducibility"""
+    if seed > 0:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    return seed
+
+
+# Image Editing function with thinking option and hyperparameters
+def edit_image(image_list: List, prompt: str, show_thinking=False, cfg_text_scale=4.0, 
+              cfg_img_scale=2.0, cfg_interval=0.0, 
+              timestep_shift=3.0, num_timesteps=50, cfg_renorm_min=0.0, 
+              cfg_renorm_type="text_channel", max_think_token_n=1024, 
+              do_sample=False, text_temperature=0.3, seed=0):
+    # Set seed for reproducibility
+    set_seed(seed)
+
+    image_list = [pil_img2rgb(Image.open(image)) for image in image_list]
+    
+    # Set hyperparameters
+    inference_hyper = dict(
+        max_think_token_n=max_think_token_n if show_thinking else 1024,
+        do_sample=do_sample if show_thinking else False,
+        text_temperature=text_temperature if show_thinking else 0.3,
+        cfg_text_scale=cfg_text_scale,
+        cfg_img_scale=cfg_img_scale,
+        cfg_interval=[cfg_interval, 1.0],  # End fixed at 1.0
+        timestep_shift=timestep_shift,
+        num_timesteps=num_timesteps,
+        cfg_renorm_min=cfg_renorm_min,
+        cfg_renorm_type=cfg_renorm_type,
+    )
+    
+    # Include thinking parameter based on user choice
+    result = inferencer(image=image_list, text=prompt, think=show_thinking, **inference_hyper)
+    return result["image"]
+
+
+def read_ann_file(ann_path):
+    spotedit_list = list()
+    with open(ann_path) as file:
+        for line in file.readlines():
+            spotedit_list.append(json.loads(line))
+    return spotedit_list
+
+
+def main(args):
+    if args.mode == 'syn':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/emu2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
+
+    elif args.mode =='real':
+        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/emu2'
+        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
+        
+    else:
+        raise Exception('Choose a valid mode!')
+
+    spotedit_list = read_ann_file(ann_file)
+
+    start_idx = 0
+    for item_idx, item in enumerate(spotedit_list[start_idx:]):
+                        
+        output_image_path = os.path.join(root_out_image_path, str(item['id']), item['image_list'][-1].split('/')[-1])
+
+        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path)
+
+        if os.path.exists(output_image_path):
+            continue
+
+
+        os.makedirs(os.path.dirname(output_image_path), exist_ok=True)
+        ret = edit_image(item['image_list'][:2], prompt=item['prompt'])
+        ret.save(output_image_path)
+    
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    # Define arguments
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["real", "syn"],  # restrict allowed values
+        required=True
+    )
+    args = parser.parse_args()
+    main(args)
