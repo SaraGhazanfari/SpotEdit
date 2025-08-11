@@ -75,13 +75,14 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
 
 
 class InternVLModel:
-    def __init__(self):
+    def __init__(self, cache_dir='./saved_models'):
         from transformers import AutoTokenizer, AutoModel
         path = "OpenGVLab/InternVL3-8B"
         self.generation_config = dict(max_new_tokens=1024, do_sample=False)
-        self.tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
+        self.tokenizer = AutoTokenizer.from_pretrained(path, cache_dir=cache_dir, trust_remote_code=True, use_fast=False)
         self.model = AutoModel.from_pretrained(
             path,
+            cache_dir=cache_dir,
             torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=True,
             use_flash_attn=True,
@@ -95,10 +96,14 @@ class InternVLModel:
         pixel_values = torch.stack(pixel_values)
         return pixel_values
     
-    def get_response(self, image_path, prompt):
-        pixel_values = self.load_image(image_path, max_num=12).to(torch.bfloat16).cuda()
-      
-        question = f'<image>\n{prompt}'
+    def get_response(self, image_path_list, prompt):
+        
+        if isinstance(image_path_list, list):
+            pixel_values = torch.concat([self.load_image(image_path, max_num=6).to(torch.bfloat16).cuda() for image_path in image_path_list])
+            question = f'Image-1: <image>\nImage-2: <image>\n{prompt}'
+        else:
+            question = f'<image>\n{prompt}'
+            pixel_values = self.load_image(image_path_list, max_num=12).to(torch.bfloat16).cuda()
         response = self.model.chat(self.tokenizer, pixel_values, question, self.generation_config)
         return response
     

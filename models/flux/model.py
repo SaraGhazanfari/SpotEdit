@@ -5,7 +5,9 @@ class FluxModel:
     def _load_model(self):
         import torch
         from diffusers import FluxKontextPipeline
-        pipe = FluxKontextPipeline.from_pretrained("black-forest-labs/FLUX.1-Kontext-dev", torch_dtype=torch.bfloat16)
+        pipe = FluxKontextPipeline.from_pretrained("black-forest-labs/FLUX.1-Kontext-dev", 
+                                                   cache_dir='./saved_models',
+                                                   torch_dtype=torch.bfloat16)
         pipe.to("cuda")
         return pipe
 
@@ -13,10 +15,14 @@ class FluxModel:
 
         from diffusers.utils import load_image
         prompt = f'Remove {obj} from the images'
+        input_image = load_image(image_path)
+        width, height = input_image.size
         image = self.flux_pipe(
-                image=load_image(image_path),
+                image=input_image,
                 prompt=prompt,
-                guidance_scale=2.5
+                guidance_scale=2.5,
+                width=width,
+                height=height
                 ).images[0]
 
         return image
