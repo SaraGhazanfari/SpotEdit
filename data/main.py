@@ -1,7 +1,8 @@
 import os, json, time
 from models import InternVLModel, FluxModel
 from PIL import Image
-import re
+import re, argparse
+
 
 def write_jsonl_file(jsonl_file, data_list):
     with open(jsonl_file, "w", encoding="utf-8") as f:
@@ -113,27 +114,100 @@ def run_step_3():
         if item_idx % 50 == 0:
             write_jsonl_file('train_data_step_2.jsonl', selected_data_list)
   
-def run_step_4():
-    TRAIN_DATA = '/vast/sg7457/spotedit/train_data' 
+def run_step_4(start_idx):
     flux_model = FluxModel()
+    data_list = read_jsonl_file('train_data_step_2.jsonl') 
+    start_time = time.time()
+    for item_idx, item in enumerate(data_list):
+        if item_idx < start_idx:
+            continue
+        print(f'{item_idx}/{len(data_list)}/{round((time.time()-start_time)/60, 2)}', flush=True)
+        for obj_idx, obj in enumerate(item['objects']):
+            for img in item['images']:
+                dist_img_path=os.path.join(TRAIN_DATA, f'{item_idx}_{obj_idx}', img.split('/')[-1])
+                if os.path.exists(dist_img_path):
+                    continue
+                os.makedirs(os.path.dirname(dist_img_path), exist_ok=True)
+                img_path = os.path.join(IMG_ROOT, img)
+                edited_img = flux_model.get_response(img_path, obj)
+                edited_img.save(dist_img_path)
+                
+  
+def all_images_exist(item, item_idx):
+    for obj_idx, obj in enumerate(item['objects']):
+        if obj[-1] == '.':
+            obj = obj[:-1]
+        for img_idx, img in enumerate(item['images']):
+            edited_img_path=os.path.join(TRAIN_DATA, f'{item_idx}_{obj_idx}', img.split('/')[-1])
+            if not os.path.exists(edited_img_path):
+                return False
+        return True
+                               
+def run_step_5():
+    data_list = read_jsonl_file('train_data_step_2.jsonl') 
+    temp_data = read_jsonl_file('train_data_step_3.jsonl')
+    data_list[:len(temp_data)] = temp_data
+    
+    mm_model = InternVLModel()
+    start_time = time.time()
     while True:
-        data_list = read_jsonl_file('train_data_step_2.jsonl') 
-        start_time = time.time()
         for item_idx, item in enumerate(data_list):
             print(f'{item_idx}/{len(data_list)}/{round((time.time()-start_time)/60, 2)}', flush=True)
+            if len(item['images'])< 2 or 'status' in item or not all_images_exist(item, item_idx):
+                continue
+            item['status'] = list()
+            
             for obj_idx, obj in enumerate(item['objects']):
-                for img in item['images']:
-                    dist_img_path=os.path.join(TRAIN_DATA, f'{item_idx}_{obj_idx}', img.split('/')[-1])
-                    if os.path.exists(dist_img_path):
-                        continue
-                    os.makedirs(os.path.dirname(dist_img_path), exist_ok=True)
+                if obj[-1] == '.':
+                    obj = obj[:-1]
+                instruction = f"Is {obj} in Image-1 correctly removed in Image-2?\nAnswer with yes or no"
+                for img_idx, img in enumerate(item['images']):
+                    edited_img_path=os.path.join(TRAIN_DATA, f'{item_idx}_{obj_idx}', img.split('/')[-1])
                     img_path = os.path.join(IMG_ROOT, img)
-                    edited_img = flux_model.get_response(img_path, obj)
-                    edited_img.save(dist_img_path)
-                
-                
-              
-import logging
-logging.getLogger("transformers").setLevel(logging.ERROR)
-IMG_ROOT='/vast/sg7457/spotedit/syn_videos' 
-run_step_4()
+                    if not os.path.exists(edited_img_path):
+                        continue
+                    if 'yes' in mm_model.get_response([img_path, edited_img_path], instruction).lower():
+                        item['status'].append(True)
+                        ref_img_path = os.path.join(IMG_ROOT, item['images'][(img_idx+1) % 2]) 
+                        instruction1 = f'Do Image-1 and Image-2 have the similar {obj}?\nAnswer with yes or no'
+                        if 'no' in mm_model.get_response([ref_img_path, img_path], instruction1).lower():
+                            item['status'][-1]=False
+                    else:
+                        item['status'].append(False)
+    
+        write_jsonl_file('train_data_step_3.jsonl', data_list)
+        print('Saved!!', flush=True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    # Define arguments
+    parser.add_argument(
+        "--step",
+        type=int,
+        choices=list(range(1,6)),  # restrict allowed values
+        required=True
+    )
+    parser.add_argument(
+        "--start_idx",
+        type=int,
+        required=False
+    )
+    
+    args = parser.parse_args()          
+                   
+    import logging
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    TRAIN_DATA = '/vast/sg7457/spotedit/train_data' 
+    IMG_ROOT='/vast/sg7457/spotedit/syn_videos' 
+    if args.step == 1:
+        run_step_1()
+    if args.step == 2:
+        run_step_2()   
+    if args.step == 3:
+        run_step_3() 
+    if args.step == 4:
+        run_step_4(args.start_idx)
+    if args.step == 5:
+        run_step_5()

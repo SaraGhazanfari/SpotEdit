@@ -100,7 +100,10 @@ class InternVLModel:
         
         if isinstance(image_path_list, list):
             pixel_values = torch.concat([self.load_image(image_path, max_num=6).to(torch.bfloat16).cuda() for image_path in image_path_list])
-            question = f'Image-1: <image>\nImage-2: <image>\n{prompt}'
+            question = ''
+            for idx in range(len(image_path_list)):
+                question += f'Image-{idx+1}: <image>\n'
+            question += f'{prompt}'
         else:
             question = f'<image>\n{prompt}'
             pixel_values = self.load_image(image_path_list, max_num=12).to(torch.bfloat16).cuda()
