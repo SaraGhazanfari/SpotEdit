@@ -133,6 +133,7 @@ class UNOPipeline:
             if ckpt_path.endswith('safetensors'):
                 sd = load_sft(ckpt_path, device='cpu')
                 missing, unexpected = self.model.load_state_dict(sd, strict=False, assign=True)
+                self.model.to(self.device)
             else:
                 dit_state = torch.load(ckpt_path, map_location='cpu')
                 sd = {}
@@ -140,6 +141,7 @@ class UNOPipeline:
                     sd[k.replace('module.','')] = dit_state[k]
                 missing, unexpected = self.model.load_state_dict(sd, strict=False, assign=True)
                 self.model.to(str(self.device))
+            
             print(f"missing keys: {missing}\n\n\n\n\nunexpected keys: {unexpected}")
 
     def set_lora(self, local_path: str = None, repo_id: str = None,
@@ -239,8 +241,8 @@ class UNOPipeline:
         exif_data[ExifTags.Base.ImageDescription] = info
         img.save(filename, format="png", exif=exif_data)
         return img, filename
-
-    @torch.inference_mode
+ 
+    @torch.inference_mode()
     def forward(
         self,
         prompt: str,
@@ -252,6 +254,7 @@ class UNOPipeline:
         ref_imgs: list[Image.Image] | None = None,
         pe: Literal['d', 'h', 'w', 'o'] = 'd',
     ):
+        ref_imgs = [preprocess_ref(img, 320) for img in ref_imgs]
         x = get_noise(
             1, height, width, device=self.device,
             dtype=torch.bfloat16, seed=seed

@@ -12,142 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
+import argparse
+from PIL import Image
 import json
-from pathlib import Path
 
-import gradio as gr
-import torch
+import os
 
 from uno.flux.pipeline import UNOPipeline
 
+def read_ann_file(ann_path):
+    spotedit_list = list()
+    with open(ann_path) as file:
+        for line in file.readlines():
+            spotedit_list.append(json.loads(line))
+    return spotedit_list
 
-def get_examples(examples_dir: str = "assets/examples") -> list:
-    examples = Path(examples_dir)
-    ans = []
-    for example in examples.iterdir():
-        if not example.is_dir():
+def edit_image(spotedit_list, root_out_image_path, pipeline):
+
+    start_idx = 0
+    for item_idx, item in enumerate(spotedit_list[start_idx:]):
+        
+        input_images = [
+                        Image.open(item['image_list'][0]).convert("RGB"), # Ref image
+                        Image.open(item['image_list'][1]).convert("RGB"), # Input image  
+                    ]
+                        
+        output_image_path = os.path.join(root_out_image_path, str(item['id']), item['image_list'][-1].split('/')[-1])
+
+        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path, flush=True)
+
+        if os.path.exists(output_image_path):
             continue
-        with open(example / "config.json") as f:
-            example_dict = json.load(f)
-  
-        
-        example_list = []
 
-        example_list.append(example_dict["useage"])  # case for
-        example_list.append(example_dict["prompt"])  # prompt
-
-        for key in ["image_ref1", "image_ref2", "image_ref3", "image_ref4"]:
-            if key in example_dict:
-                example_list.append(str(example / example_dict[key]))
-            else:
-                example_list.append(None)
-
-        example_list.append(example_dict["seed"])
-
-        ans.append(example_list)
-    return ans
-
-
-def create_demo(
-    model_type: str,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    offload: bool = False,
-):
-    pipeline = UNOPipeline(model_type, device, offload, only_lora=True, lora_rank=512)
-
-    badges_text = r"""
-    <div style="text-align: center; display: flex; justify-content: left; gap: 5px;">
-    <a href="https://github.com/bytedance/UNO"><img alt="Build" src="https://img.shields.io/github/stars/bytedance/UNO"></a> 
-    <a href="https://bytedance.github.io/UNO/"><img alt="Build" src="https://img.shields.io/badge/Project%20Page-UNO-yellow"></a> 
-    <a href="https://arxiv.org/abs/2504.02160"><img alt="Build" src="https://img.shields.io/badge/arXiv%20paper-UNO-b31b1b.svg"></a>
-    <a href="https://huggingface.co/bytedance-research/UNO"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Hugging%20Face&message=Model&color=orange"></a>
-    <a href="https://huggingface.co/spaces/bytedance-research/UNO-FLUX"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Hugging%20Face&message=demo&color=orange"></a>
-    </div>
-    """.strip()
-
-    with gr.Blocks() as demo:
-        gr.Markdown(f"# UNO by UNO team")
-        gr.Markdown(badges_text)
-        with gr.Row():
-            with gr.Column():
-                prompt = gr.Textbox(label="Prompt", value="handsome woman in the city")
-                with gr.Row():
-                    image_prompt1 = gr.Image(label="Ref Img1", visible=True, interactive=True, type="pil")
-                    image_prompt2 = gr.Image(label="Ref Img2", visible=True, interactive=True, type="pil")
-                    image_prompt3 = gr.Image(label="Ref Img3", visible=True, interactive=True, type="pil")
-                    image_prompt4 = gr.Image(label="Ref img4", visible=True, interactive=True, type="pil")
-
-                with gr.Row():
-                    with gr.Column():
-                        width = gr.Slider(512, 2048, 512, step=16, label="Gneration Width")
-                        height = gr.Slider(512, 2048, 512, step=16, label="Gneration Height")
-                    with gr.Column():
-                        gr.Markdown("📌 The model trained on 512x512 resolution.\n")
-                        gr.Markdown(
-                            "The size closer to 512 is more stable,"
-                            " and the higher size gives a better visual effect but is less stable"
-                        )
-
-                with gr.Accordion("Advanced Options", open=False):
-                    with gr.Row():
-                        num_steps = gr.Slider(1, 50, 25, step=1, label="Number of steps")
-                        guidance = gr.Slider(1.0, 5.0, 4.0, step=0.1, label="Guidance", interactive=True)
-                        seed = gr.Number(-1, label="Seed (-1 for random)")
-
-                generate_btn = gr.Button("Generate")
-
-            with gr.Column():
-                output_image = gr.Image(label="Generated Image")
-                download_btn = gr.File(label="Download full-resolution", type="filepath", interactive=False)
-
-
-            inputs = [
-                prompt, width, height, guidance, num_steps,
-                seed, image_prompt1, image_prompt2, image_prompt3, image_prompt4
-            ]
-            generate_btn.click(
-                fn=pipeline.gradio_generate,
-                inputs=inputs,
-                outputs=[output_image, download_btn],
-            )
-        
-        example_text = gr.Text("", visible=False, label="Case For:")
-        examples = get_examples("./assets/examples")
-
-        gr.Examples(
-            examples=examples,
-            inputs=[
-                example_text, prompt,
-                image_prompt1, image_prompt2, image_prompt3, image_prompt4,
-                seed, output_image
-            ],
-        )
-
-    return demo
+        os.makedirs(os.path.dirname(output_image_path), exist_ok=True)
+        ret = pipeline(prompt=item['prompt'], ref_imgs=input_images)
+        ret.image.save(output_image_path)
 
 if __name__ == "__main__":
-    from typing import Literal
+    parser = argparse.ArgumentParser()
 
-    from transformers import HfArgumentParser
+    # Define arguments
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["real", "syn"],  # restrict allowed values
+        required=True
+    )
+    args = parser.parse_args()
+    root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/uno'
+    ann_file = f'/scratch/sg7457/code/SpotEdit/spotframe_benchmark_{args.mode}_withgt.jsonl'
+        
+    # args_tuple = parser.parse_args_into_dataclasses() 
+    # args = args_tuple[0]
 
-    @dataclasses.dataclass
-    class AppArgs:
-        name: Literal["flux-dev", "flux-dev-fp8", "flux-schnell"] = "flux-dev"
-        device: Literal["cuda", "cpu"] = (
-            "cuda" if torch.cuda.is_available() \
-            else "mps" if torch.backends.mps.is_available() \
-            else "cpu"
-        )
-        offload: bool = dataclasses.field(
-            default=False,
-            metadata={"help": "If True, sequantial offload the models(ae, dit, text encoder) to CPU if not used."}
-        )
-        port: int = 7860
+    pipeline = UNOPipeline(model_type='flux-dev', device='cuda:0', offload=False, only_lora=True, lora_rank=512)
+    
+    edit_image(read_ann_file(ann_file), root_out_image_path=root_out_image_path, pipeline=pipeline)
 
-    parser = HfArgumentParser([AppArgs])
-    args_tuple = parser.parse_args_into_dataclasses() # type: tuple[AppArgs]
-    args = args_tuple[0]
 
-    demo = create_demo(args.name, args.device, args.offload)
-    demo.launch(server_port=args.port)
+
+
+
+
+    

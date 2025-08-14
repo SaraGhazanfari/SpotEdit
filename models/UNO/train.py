@@ -471,6 +471,7 @@ def main(
     accelerator.end_training()
 
 if __name__ == "__main__":
-    parser = transformers.HfArgumentParser([TrainArgs])
+    from transformers import HfArgumentParser
+    parser = HfArgumentParser([AppArgs])
     args_tuple = parser.parse_args_into_dataclasses(args_file_flag="--config")
     main(*args_tuple)
