@@ -72,7 +72,7 @@ def edit_image(spotedit_list, root_out_image_path):
                         
         output_image_path = os.path.join(root_out_image_path, str(item['id']), item['image_list'][-1].split('/')[-1])
 
-        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path)
+        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path, flush=True)
 
         if os.path.exists(output_image_path):
             continue
@@ -95,15 +95,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     
-    if args.mode == 'syn':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/emu2'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
-
-    elif args.mode =='real':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/emu2'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
-        
-    else:
-        raise Exception('Choose a valid mode!')
+    root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/emu2'
+    ann_file = f'/scratch/sg7457/code/SpotEdit/spotframe_benchmark_{args.mode}_withgt.jsonl'
         
     edit_image(read_ann_file(ann_file), root_out_image_path=root_out_image_path)

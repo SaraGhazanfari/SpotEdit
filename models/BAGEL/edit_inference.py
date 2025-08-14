@@ -336,91 +336,92 @@ from accelerate.utils import BnbQuantizationConfig, load_and_quantize_model
 # Model Initialization
 model_path = '/scratch/sg7457/code/SpotEdit/saved_models/BAGEL-7B-MoT'
 
-llm_config = Qwen2Config.from_json_file(os.path.join(model_path, "llm_config.json"))
-llm_config.qk_norm = True
-llm_config.tie_word_embeddings = False
-llm_config.layer_module = "Qwen2MoTDecoderLayer"
+def get_inferencer():
+    llm_config = Qwen2Config.from_json_file(os.path.join(model_path, "llm_config.json"))
+    llm_config.qk_norm = True
+    llm_config.tie_word_embeddings = False
+    llm_config.layer_module = "Qwen2MoTDecoderLayer"
 
-vit_config = SiglipVisionConfig.from_json_file(os.path.join(model_path, "vit_config.json"))
-vit_config.rope = False
-vit_config.num_hidden_layers -= 1
+    vit_config = SiglipVisionConfig.from_json_file(os.path.join(model_path, "vit_config.json"))
+    vit_config.rope = False
+    vit_config.num_hidden_layers -= 1
 
-vae_model, vae_config = load_ae(local_path=os.path.join(model_path, "ae.safetensors"))
+    vae_model, vae_config = load_ae(local_path=os.path.join(model_path, "ae.safetensors"))
 
-config = BagelConfig(
-    visual_gen=True,
-    visual_und=True,
-    llm_config=llm_config, 
-    vit_config=vit_config,
-    vae_config=vae_config,
-    vit_max_num_patch_per_side=70,
-    connector_act='gelu_pytorch_tanh',
-    latent_patch_size=2,
-    max_latent_size=64,
-)
+    config = BagelConfig(
+        visual_gen=True,
+        visual_und=True,
+        llm_config=llm_config, 
+        vit_config=vit_config,
+        vae_config=vae_config,
+        vit_max_num_patch_per_side=70,
+        connector_act='gelu_pytorch_tanh',
+        latent_patch_size=2,
+        max_latent_size=64,
+    )
 
-with init_empty_weights():
-    language_model = Qwen2ForCausalLM(llm_config)
-    vit_model      = SiglipVisionModel(vit_config)
-    model          = Bagel(language_model, vit_model, config)
-    model.vit_model.vision_model.embeddings.convert_conv2d_to_linear(vit_config, meta=True)
+    with init_empty_weights():
+        language_model = Qwen2ForCausalLM(llm_config)
+        vit_model      = SiglipVisionModel(vit_config)
+        model          = Bagel(language_model, vit_model, config)
+        model.vit_model.vision_model.embeddings.convert_conv2d_to_linear(vit_config, meta=True)
 
-tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
-tokenizer, new_token_ids, _ = add_special_tokens(tokenizer)
+    tokenizer = Qwen2Tokenizer.from_pretrained(model_path)
+    tokenizer, new_token_ids, _ = add_special_tokens(tokenizer)
 
-vae_transform = ImageTransform(1024, 512, 16)
-vit_transform = ImageTransform(980, 224, 14)
+    vae_transform = ImageTransform(1024, 512, 16)
+    vit_transform = ImageTransform(980, 224, 14)
 
-# Model Loading and Multi GPU Infernece Preparing
-device_map = infer_auto_device_map(
-    model,
-    max_memory={i: "80GiB" for i in range(torch.cuda.device_count())},
-    no_split_module_classes=["Bagel", "Qwen2MoTDecoderLayer"],
-)
+    # Model Loading and Multi GPU Infernece Preparing
+    device_map = infer_auto_device_map(
+        model,
+        max_memory={i: "80GiB" for i in range(torch.cuda.device_count())},
+        no_split_module_classes=["Bagel", "Qwen2MoTDecoderLayer"],
+    )
 
-same_device_modules = [
-    'language_model.model.embed_tokens',
-    'time_embedder',
-    'latent_pos_embed',
-    'vae2llm',
-    'llm2vae',
-    'connector',
-    'vit_pos_embed'
-]
+    same_device_modules = [
+        'language_model.model.embed_tokens',
+        'time_embedder',
+        'latent_pos_embed',
+        'vae2llm',
+        'llm2vae',
+        'connector',
+        'vit_pos_embed'
+    ]
 
-if torch.cuda.device_count() == 1:
-    first_device = device_map.get(same_device_modules[0], "cuda:0")
-    for k in same_device_modules:
-        if k in device_map:
-            device_map[k] = first_device
-        else:
-            device_map[k] = "cuda:0"
-else:
-    first_device = device_map.get(same_device_modules[0])
-    for k in same_device_modules:
-        if k in device_map:
-            device_map[k] = first_device
+    if torch.cuda.device_count() == 1:
+        first_device = device_map.get(same_device_modules[0], "cuda:0")
+        for k in same_device_modules:
+            if k in device_map:
+                device_map[k] = first_device
+            else:
+                device_map[k] = "cuda:0"
+    else:
+        first_device = device_map.get(same_device_modules[0])
+        for k in same_device_modules:
+            if k in device_map:
+                device_map[k] = first_device
 
-model = load_checkpoint_and_dispatch(
-    model,
-    checkpoint=os.path.join(model_path, "ema.safetensors"),
-    device_map=device_map,
-    offload_buffers=True,
-    offload_folder="offload",
-    dtype=torch.bfloat16,
-    force_hooks=True,
-).eval()
+    model = load_checkpoint_and_dispatch(
+        model,
+        checkpoint=os.path.join(model_path, "ema.safetensors"),
+        device_map=device_map,
+        offload_buffers=True,
+        offload_folder="offload",
+        dtype=torch.bfloat16,
+        force_hooks=True,
+    ).eval()
 
-# Inferencer Preparing 
-inferencer = InterleaveInferencer(
-    model=model,
-    vae_model=vae_model,
-    tokenizer=tokenizer,
-    vae_transform=vae_transform,
-    vit_transform=vit_transform,
-    new_token_ids=new_token_ids,
-)
-
+    # Inferencer Preparing 
+    inferencer = InterleaveInferencer(
+        model=model,
+        vae_model=vae_model,
+        tokenizer=tokenizer,
+        vae_transform=vae_transform,
+        vit_transform=vit_transform,
+        new_token_ids=new_token_ids,
+    )
+    return inferencer
 
 def set_seed(seed):
     """Set random seeds for reproducibility"""
@@ -437,15 +438,13 @@ def set_seed(seed):
 
 
 # Image Editing function with thinking option and hyperparameters
-def edit_image(image_list: List, prompt: str, show_thinking=False, cfg_text_scale=4.0, 
+def get_inference_hyper(show_thinking=False, cfg_text_scale=4.0, 
               cfg_img_scale=2.0, cfg_interval=0.0, 
               timestep_shift=3.0, num_timesteps=50, cfg_renorm_min=0.0, 
               cfg_renorm_type="text_channel", max_think_token_n=1024, 
               do_sample=False, text_temperature=0.3, seed=0):
     # Set seed for reproducibility
     set_seed(seed)
-
-    image_list = [pil_img2rgb(Image.open(image)) for image in image_list]
     
     # Set hyperparameters
     inference_hyper = dict(
@@ -460,10 +459,8 @@ def edit_image(image_list: List, prompt: str, show_thinking=False, cfg_text_scal
         cfg_renorm_min=cfg_renorm_min,
         cfg_renorm_type=cfg_renorm_type,
     )
+    return inference_hyper
     
-    # Include thinking parameter based on user choice
-    result = inferencer(image=image_list, text=prompt, think=show_thinking, **inference_hyper)
-    return result["image"]
 
 
 def read_ann_file(ann_path):
@@ -475,33 +472,32 @@ def read_ann_file(ann_path):
 
 
 def main(args):
-    if args.mode == 'syn':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/bagel'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
-
-    elif args.mode =='real':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/bagel'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
-        
-    else:
-        raise Exception('Choose a valid mode!')
+    
+    root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/bagel'
+    ann_file = f'/scratch/sg7457/code/SpotEdit/spotframe_benchmark_{args.mode}_withgt.jsonl'
 
     spotedit_list = read_ann_file(ann_file)
-
+    inference_hyper = get_inference_hyper()
+    inferencer = get_inferencer()
+    
     start_idx = 0
-    for item_idx, item in enumerate(spotedit_list[start_idx:]):
-                        
+    
+    for item_idx, item in enumerate(spotedit_list[start_idx:]):    
         output_image_path = os.path.join(root_out_image_path, str(item['id']), item['image_list'][-1].split('/')[-1])
 
-        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path)
+        print(f'{item_idx+start_idx}/{len(spotedit_list)}', output_image_path, flush=True)
 
         if os.path.exists(output_image_path):
             continue
-
-
+        
+        image_list = [pil_img2rgb(Image.open(image)) for image in item['image_list'][:2]]               
+        
+        with torch.no_grad():
+            ret = inferencer(image=image_list, text=item['prompt'], think=False, **inference_hyper)["image"]
+    
         os.makedirs(os.path.dirname(output_image_path), exist_ok=True)
-        ret = edit_image(item['image_list'][:2], prompt=item['prompt'])
         ret.save(output_image_path)
+        
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
