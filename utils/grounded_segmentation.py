@@ -9,14 +9,14 @@ from groundingdino.util.inference import Model
 from segment_anything import sam_model_registry, SamPredictor
 
 
-seg_root = '/mnt/localssd/models/segmentation'
-det_root = '/mnt/localssd/models/detection'
-
+seg_root = './saved_models/sam'
+det_root = 'groundingdino/config'
+det_ckpt_path='./saved_models/GroundingDino/'
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # GroundingDINO config and checkpoint
 GROUNDING_DINO_CONFIG_PATH = os.path.join(det_root, "GroundingDINO_SwinT_OGC.py")
-GROUNDING_DINO_CHECKPOINT_PATH = os.path.join(det_root, "groundingdino_swint_ogc.pth")
+GROUNDING_DINO_CHECKPOINT_PATH = os.path.join(det_ckpt_path, "groundingdino_swint_ogc.pth")
 
 # Segment-Anything checkpoint
 SAM_ENCODER_VERSION = "vit_h"

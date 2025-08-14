@@ -10,7 +10,9 @@ import torch
 from data.data_utils import pil_img2rgb
 from modeling.bagel.qwen2_navit import NaiveCache
 
-import json, os
+import os
+from models.utils import read_ann_file
+
 
 VLM_THINK_SYSTEM_PROMPT = '''You should first think about the reasoning process in the mind and then provide the user with the answer. 
 The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here'''
@@ -463,20 +465,10 @@ def get_inference_hyper(show_thinking=False, cfg_text_scale=4.0,
     
 
 
-def read_ann_file(ann_path):
-    spotedit_list = list()
-    with open(ann_path) as file:
-        for line in file.readlines():
-            spotedit_list.append(json.loads(line))
-    return spotedit_list
-
-
 def main(args):
     
     root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/bagel'
-    ann_file = f'/scratch/sg7457/code/SpotEdit/spotframe_benchmark_{args.mode}_withgt.jsonl'
-
-    spotedit_list = read_ann_file(ann_file)
+    spotedit_list = read_ann_file(args.mode)
     inference_hyper = get_inference_hyper()
     inferencer = get_inferencer()
     
@@ -506,7 +498,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["real", "syn"],  # restrict allowed values
+        choices=["real", "syn", "dreamedit"],  # restrict allowed values
         required=True
     )
     args = parser.parse_args()

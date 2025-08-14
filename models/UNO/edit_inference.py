@@ -46,7 +46,7 @@ def edit_image(spotedit_list, root_out_image_path, pipeline):
 
         os.makedirs(os.path.dirname(output_image_path), exist_ok=True)
         ret = pipeline(prompt=item['prompt'], ref_imgs=input_images)
-        ret.image.save(output_image_path)
+        ret.save(output_image_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

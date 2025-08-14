@@ -1,5 +1,5 @@
 import dotenv, json
-
+from models.utils import read_ann_file
 dotenv.load_dotenv(override=True)
 
 import argparse
@@ -342,13 +342,7 @@ if __name__ == "__main__":
     root_dir = os.path.abspath(os.path.join(__file__, os.path.pardir))
     args = parse_args()
     
-    if args.mode == 'syn':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/omnigen2'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
-
-    elif args.mode =='real':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/omnigen2'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
-        
-         
-    main(args, read_ann_file(ann_file), root_out_image_path=root_out_image_path)
+    root_out_image_path = f'/vast/sg7457/spotedit/generated_images/{args.mode}/omnigen2'
+    # ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
+   
+    main(args, read_ann_file(args.mode), root_out_image_path=root_out_image_path)

@@ -1,53 +1,43 @@
-import os, json, torch
+import os, torch
 from PIL import Image
 from utils.grounded_segmentation import GroundedSegmentation
+from models.utils import read_ann_file
 
 
 class SpotFrameMetric:
-    def __init__(self, benchmark_section='syn'):
-        self.benchmark_section = benchmark_section
-        if benchmark_section == 'syn':
-            self.all_root_path = {
-                                # 'Emu2': '/mnt/localssd/spot_edit/george_story/emu2_edited_videos', 
-                                # 'OmniGen': '/mnt/localssd/spot_edit/george_story/omnigen_edited_videos',
-                                # 'UNO': '/mnt/localssd/spot_edit/george_story/uno_edited_videos',
-                                # 'BAGEL': '/mnt/localssd/spot_edit/george_story/bagel_edited_videos',
-                                # 'OmniGen2': '/mnt/localssd/spot_edit/george_story/omnigen2_edited_videos',
-                                'GPT-4o': '/mnt/localssd/spot_edit/george_story/edited_videos/'
-                                }
+    def __init__(self, mode='syn'):
+        ROOT = f'/scratch/sg7457/dataset/spotedit/generated_images/{mode}'
+        model_names = [
+            #'Emu2', 'OmniGen', 'UNO',
+            'BAGEL',
+            #'OmniGen2'
+            ]
+        self.mode = mode
+        if mode == 'syn':
             self.idx_dict = {'general': [0, 108],
                     'input robustness': [108, 160],
                     'ref robustness': [160, 210],
                     'overall robustness': [210, 260]} 
             
-        else:
-            self.all_root_path = {
-                                #'Emu2': '/mnt/localssd/spot_edit/spotframe_real/emu2_edited_videos', 
-                                 'OmniGen': '/mnt/localssd/spot_edit/spotframe_real/omnigen_edited_videos',
-                                # 'UNO': '/mnt/localssd/spot_edit/spotframe_real/uno_edited_videos',
-                                # 'BAGEL': '/mnt/localssd/spot_edit/spotframe_real/bagel_edited_videos',
-                                # 'OmniGen2': '/mnt/localssd/spot_edit/spotframe_real/omnigen2_edited_videos',
-                                #'GPT-4o': '/mnt/localssd/spot_edit/spotframe_real/edited_videos/'
-                                }
-                                            
+        elif mode == 'real':   
             self.idx_dict = {'general': [0, 180],
                     'input robustness': [180, 230],
                     'ref robustness': [230, 281]} 
-
-        self.root_input_image_path = '/mnt/localssd/spot_edit/george_story/videos/'
+            
+        elif mode == 'dreamedit':
+                                           
+            self.idx_dict = {'general': [0, 22],
+                            'input robustness': None,
+                            'ref robustness': None} 
+        
+        self.all_root_path = {name: os.path.join(ROOT, name.lower()) for name in model_names}
+            
+        self.root_input_image_path = f'/scratch/sg7457/dataset/spotedit/{mode}_videos'
         self.root_ref_image_path = '/mnt/localssd/spot_edit/george_story/edited_videos/'
         self.spotframe_list = list()
         self.grounded_segementor = GroundedSegmentation()
-        self.spotframe_list = self._read_ann_file(benchmark_section)
+        self.spotframe_list = read_ann_file(mode)
         self.similarity_model, self.preprocess = self._load_similarity_model()
-
-
-    def _read_ann_file(self, benchmark_section):
-        spotframe_list = list()   
-        with open(f'/home/colligo/SpotFrame/spotframe_benchmark_{benchmark_section}_withgt.jsonl') as file:
-            for line in file.readlines():
-                spotframe_list.append(json.loads(line))
-        return spotframe_list
     
     def _load_similarity_model(self):
         import open_clip
@@ -64,7 +54,7 @@ class SpotFrameMetric:
             return self.similarity_model.encode_image(images)
 
     def calculate_similarity_score(self, embed1, embed2):
-        return torch.nn.functional.cosine_similarity(embed1, embed2, dim=0)
+        return torch.nn.functional.cosine_similarity(embed1, embed2, dim=1)
     
     def calculate_robusntess_score(self, robustness_type): 
         '''
@@ -76,7 +66,7 @@ class SpotFrameMetric:
             output_image_list = list()
             input_image_list = list()
             for item in self.spotframe_list[self.idx_dict[robustness_type][0]:self.idx_dict[robustness_type][1]]:
-                if self.benchmark_section == 'syn':
+                if self.mode == 'syn':
                     out_path = os.path.join(model_root, str(item['id']), item['image_list'][2].split('/')[-1])
                 else:
                     out_path = os.path.join(model_root, str(item['id']), item['image_list'][1].split('/')[-1])
@@ -109,7 +99,7 @@ class SpotFrameMetric:
             output_image_list = list()
             for item in self.spotframe_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
                 if idx == 0:
-                    if self.benchmark_section == 'syn':
+                    if self.mode == 'syn':
                         gt_image_list.append(os.path.join(self.root_ref_image_path, str(item['edit_id']), item['image_list'][2].split('/')[-1]))
                     else:
                         gt_image_list.append(item['image_list'][2])
@@ -169,24 +159,22 @@ class SpotFrameMetric:
 
                 output_image_list.append(self.grounded_segementor.get_detected_bbx(edit_type='mask_out', obj=item['target_obj'],
                                                                            image_path=output_image_path))
-               
             if idx == 0:
                 input_objects_embed = self._encode_images(input_image_list)
 
-            
             output_objects_embde = self._encode_images(output_image_list)
             sim_score = round(self.calculate_similarity_score(embed1=input_objects_embed, embed2=output_objects_embde).mean().item(), 4)
             print(f"Background Consistency Score for {model_name} is : {sim_score} for {self.idx_dict['general'][1]-self.idx_dict['general'][0]} samples")
+            
 
 
-spotframe_metric = SpotFrameMetric(benchmark_section='syn')
+spotframe_metric = SpotFrameMetric(mode='dreamedit')
 
 #spotframe_metric.calculate_robusntess_score(robustness_type='input robustness')
-spotframe_metric.calculate_robusntess_score(robustness_type='ref robustness')
+#spotframe_metric.calculate_robusntess_score(robustness_type='ref robustness')
 # spotframe_metric.calculate_robusntess_score(robustness_type='overall robustness')
 
 
 # spotframe_metric.calculate_gt_score()
-# spotframe_metric.calculate_object_consistency_score()
-
-# spotframe_metric.calculate_background_consistency_score()
+spotframe_metric.calculate_object_consistency_score()
+spotframe_metric.calculate_background_consistency_score()
