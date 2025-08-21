@@ -6,7 +6,7 @@ import subprocess
 import time
 import sys, argparse
 from typing import List
-
+from utils import read_ann_file
 from cog import BasePredictor, Input, Path
 from PIL import Image
 
@@ -81,27 +81,12 @@ class Predictor(BasePredictor):
             max_input_image_size=max_input_image_size,
         )
         return output[0]
-    
-def read_ann_file(ann_path):
-    spotedit_list = list()
-    with open(ann_path) as file:
-        for line in file.readlines():
-            spotedit_list.append(json.loads(line))
-    return spotedit_list
 
 def main(args):
-    if args.mode == 'syn':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/syn/omnigen'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
-
-    elif args.mode =='real':
-        root_out_image_path = '/vast/sg7457/spotedit/generated_images/real/omnigen'
-        ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_real_withgt.jsonl'
+    
+    root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/omnigen'
         
-    else:
-        raise Exception('Choose a valid mode!')
-
-    spotedit_list = read_ann_file(ann_file)
+    spotedit_list = read_ann_file(args.mode)
     inferencer = Predictor()
     start_idx = 0
     for item_idx, item in enumerate(spotedit_list[start_idx:]):
@@ -126,7 +111,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["real", "syn"],  # restrict allowed values
+        choices=["real", "syn", "dreamedit"],  # restrict allowed values
         required=True
     )
     args = parser.parse_args()

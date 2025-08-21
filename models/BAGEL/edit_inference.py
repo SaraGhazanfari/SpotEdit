@@ -11,7 +11,7 @@ from data.data_utils import pil_img2rgb
 from modeling.bagel.qwen2_navit import NaiveCache
 
 import os
-from models.utils import read_ann_file
+from utils import read_ann_file
 
 
 VLM_THINK_SYSTEM_PROMPT = '''You should first think about the reasoning process in the mind and then provide the user with the answer. 

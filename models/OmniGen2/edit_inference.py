@@ -1,5 +1,5 @@
 import dotenv, json
-from models.utils import read_ann_file
+from utils import read_ann_file
 dotenv.load_dotenv(override=True)
 
 import argparse
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["real", "syn"],  # restrict allowed values
+        choices=["real", "syn", "dreamedit"],  # restrict allowed values
         required=True
     )
     
@@ -329,20 +329,12 @@ def main(args: argparse.Namespace, spotedit_list, root_out_image_path) -> None:
         output_image = create_collage(vis_images)
 
         output_image.save(output_image_path)
-      
-    
-def read_ann_file(ann_path):
-    spotedit_list = list()
-    with open(ann_path) as file:
-        for line in file.readlines():
-            spotedit_list.append(json.loads(line))
-    return spotedit_list
 
 if __name__ == "__main__":
     root_dir = os.path.abspath(os.path.join(__file__, os.path.pardir))
     args = parse_args()
     
-    root_out_image_path = f'/vast/sg7457/spotedit/generated_images/{args.mode}/omnigen2'
+    root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/omnigen2'
     # ann_file = '/scratch/sg7457/code/SpotEdit/spotframe_benchmark_syn_withgt.jsonl'
    
     main(args, read_ann_file(args.mode), root_out_image_path=root_out_image_path)

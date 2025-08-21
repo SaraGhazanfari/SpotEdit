@@ -73,7 +73,7 @@ def finalize_objects_in_image(item, mm_model):
     return list(list_of_sets[0].intersection(list_of_sets[1]))
   
 def run_step_1():    
-    read_initial_ann(root='/vast/sg7457/spotedit/syn_annotations')
+    return read_initial_ann(root='/vast/sg7457/spotedit/syn_annotations')
     
 def run_step_2():
     data_list = read_jsonl_file('train_data_step_0.jsonl')
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--step",
         type=int,
-        choices=list(range(1,6)),  # restrict allowed values
+        choices=list(range(0,6)),  # restrict allowed values
         required=True
     )
     parser.add_argument(
@@ -199,6 +199,7 @@ if __name__ == "__main__":
                    
     import logging
     logging.getLogger("transformers").setLevel(logging.ERROR)
+    
     TRAIN_DATA = '/vast/sg7457/spotedit/train_data' 
     IMG_ROOT='/vast/sg7457/spotedit/syn_videos' 
     if args.step == 1:
@@ -211,3 +212,24 @@ if __name__ == "__main__":
         run_step_4(args.start_idx)
     if args.step == 5:
         run_step_5()
+
+    data_list = read_jsonl_file(os.path.join('/vast/sg7457/spotedit/syn_annotations', 'train.jsonl'))
+    item = data_list[0]
+    
+    import matplotlib.pyplot as plt
+    from PIL import Image
+    
+    rows, cols = 6, 5
+
+    # Create figure
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
+
+    # Loop through images and plot them
+    for i, ax in enumerate(axes.flat):
+        ax.imshow(Image.open(os.path.join(IMG_ROOT, item['images'][i])))
+        ax.axis("off")  # Hide axes
+
+    # Adjust layout and save
+    plt.tight_layout()
+    plt.savefig("output_grid.png", dpi=300)
+    plt.close()

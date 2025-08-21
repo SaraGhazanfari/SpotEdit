@@ -7,6 +7,7 @@ import torchvision
 from PIL import Image
 from groundingdino.util.inference import Model
 from segment_anything import sam_model_registry, SamPredictor
+from models.utils import read_ann_file
 
 
 seg_root = './saved_models/sam'
@@ -69,7 +70,16 @@ class GroundedSegmentation:
         )[0]
 
         return map(int, smallest_box)
-
+    
+    def get_most_confident_bbx(self, boxes, confidence):
+        # Index of the highest confidence
+        max_idx = max(range(len(confidence)), key=lambda i: confidence[i])
+        
+        # Get the corresponding box
+        best_box = boxes[max_idx]
+        
+        return map(int, best_box)
+    
     def cutout_from_bbx(self, image, boxes, confidence):
         """
         Crop image region from the smallest box within 0.1 confidence of the most confident box.
@@ -82,7 +92,7 @@ class GroundedSegmentation:
         Returns:
             np.ndarray: Cropped image region.
         """
-        x1, y1, x2, y2 = self.get_most_cofident_smallest_bbx(boxes, confidence)
+        x1, y1, x2, y2 = self.get_most_confident_bbx(boxes, confidence)
         cropped = image[y1:y2, x1:x2]
         return Image.fromarray(cropped)
 
@@ -99,11 +109,9 @@ class GroundedSegmentation:
             np.ndarray: Binary mask (uint8, 0 or 255) for the smallest box.
         """
 
-    
-
         # Find the smallest bounding box by area
         #smallest_box = min(boxes, key=lambda box: (box[2] - box[0]) * (box[3] - box[1]))
-        x1, y1, x2, y2 = self.get_most_cofident_smallest_bbx(boxes, confidence)
+        x1, y1, x2, y2 = self.get_most_confident_bbx(boxes, confidence)
 
         # mask = np.zeros((h, w), dtype=np.uint8)
         image[y1:y2, x1:x2] = 0
@@ -194,7 +202,3 @@ class GroundedSegmentation:
         if mask_inv.ndim == 2:
             mask_inv = mask_inv[..., np.newaxis]
         return image * mask_inv 
-    
-
-# gs = GroundedSegmentation()
-# gs.get_mask(obj=['dog', 'cat'], img_path=["000110/000110_keyframe_0-28-33-753.jpg", "000110/000110_keyframe_0-28-40-719.jpg"])

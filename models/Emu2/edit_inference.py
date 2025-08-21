@@ -5,7 +5,7 @@ from PIL import Image
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import re, argparse
-
+from utils import read_ann_file
 
 def swap_words(sentence, word1, word2):
     pattern = rf'\b({word1}|{word2})\b'
@@ -51,15 +51,6 @@ pipe = DiffusionPipeline.from_pretrained(
 
 pipe.to("cuda")
 
-def read_ann_file(ann_path):
-    spotedit_list = list()
-    with open(ann_path) as file:
-        for line in file.readlines():
-            spotedit_list.append(json.loads(line))
-    return spotedit_list
-
-
-
 def edit_image(spotedit_list, root_out_image_path):
 
     start_idx = 0
@@ -90,12 +81,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["real", "syn"],  # restrict allowed values
+        choices=["real", "syn", "dreamedit"],  # restrict allowed values
         required=True
     )
     args = parser.parse_args()
     
     root_out_image_path = f'/scratch/sg7457/dataset/spotedit/generated_images/{args.mode}/emu2'
-    ann_file = f'/scratch/sg7457/code/SpotEdit/spotframe_benchmark_{args.mode}_withgt.jsonl'
         
-    edit_image(read_ann_file(ann_file), root_out_image_path=root_out_image_path)
+    edit_image(read_ann_file(args.mode), root_out_image_path=root_out_image_path)
