@@ -44,5 +44,5 @@ def read_ann_file(mode):
     if mode == 'dreamedit':
         ann_list = read_dreamedit()
     else:
-        ann_list= read_spotedit(f'spotframe_benchmark_{mode}_withgt.jsonl') 
+        ann_list= read_spotedit(f'{mode}.jsonl') 
     return ann_list

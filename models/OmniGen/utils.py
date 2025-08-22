@@ -32,8 +32,6 @@ def read_dreamedit():
                 reference_image = file_name
                 img_path = os.path.join(root, 'data/replacement_source', current_subject)
             else:  # Input image row
-                # if not current_subject or current_subject in seen_subjects:
-                #     continue
                 first_input_image = file_name
                 pairs.append({
                     "id": row_id,
@@ -55,5 +53,5 @@ def read_ann_file(mode):
     if mode == 'dreamedit':
         ann_list = read_dreamedit()
     else:
-        ann_list= read_spotedit(f'spotframe_benchmark_{mode}_withgt.jsonl') 
+        ann_list= read_spotedit(f'{mode}.jsonl') 
     return ann_list
