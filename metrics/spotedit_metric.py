@@ -7,14 +7,15 @@ import argparse
 from PIL import Image
 from models.internvl.model import InternVLModel
 
-class SpotFrameMetric:
+class SpotEditMetric:
     def __init__(self, mode='syn', encoder_name='clip', pool='cls'):
         self.mode = mode
         self.pool = pool
         ROOT = f'/scratch/sg7457/dataset/spotedit/generated_images/{mode}'
         model_names = [
             'Emu2', 
-            'OmniGen', 'UNO',
+            'OmniGen', 
+            'UNO',
             'BAGEL',
             'OmniGen2'
             ]
@@ -40,9 +41,9 @@ class SpotFrameMetric:
             
         self.root_input_image_path = f'/scratch/sg7457/dataset/spotedit/{mode}_videos'
         self.root_ref_image_path = f'/vast/sg7457/spotedit/gpt_generated_images/{mode}/'
-        self.spotframe_list = list()
+        self.spotedit_list = list()
         self.grounded_segementor = GroundedSegmentation()
-        self.spotframe_list = read_ann_file(mode)
+        self.spotedit_list = read_ann_file(mode)
         self.encoder = self._load_encoder(encoder_name)
     
     def _load_encoder(self, encoder_name):
@@ -63,7 +64,7 @@ class SpotFrameMetric:
         '''
         for idx, (model_name, model_root) in enumerate(self.all_root_path.items()):
             count, all_ = 0, 0
-            for item in self.spotframe_list[self.idx_dict[robustness_type][0]:self.idx_dict[robustness_type][1]]:
+            for item in self.spotedit_list[self.idx_dict[robustness_type][0]:self.idx_dict[robustness_type][1]]:
                 if self.mode == 'syn':
                     out_path = os.path.join(model_root, str(item['id']), item['image_list'][2].split('/')[-1])
                 else:
@@ -94,7 +95,7 @@ class SpotFrameMetric:
         for idx, (model_name, model_root) in enumerate(self.all_root_path.items()):
             output_image_list = list()
             input_image_list = list()
-            for item in self.spotframe_list[self.idx_dict[robustness_type][0]:self.idx_dict[robustness_type][1]]:
+            for item in self.spotedit_list[self.idx_dict[robustness_type][0]:self.idx_dict[robustness_type][1]]:
                 if self.mode == 'syn':
                     out_path = os.path.join(model_root, str(item['id']), item['image_list'][2].split('/')[-1])
                 else:
@@ -126,7 +127,7 @@ class SpotFrameMetric:
 
         for idx, (model_name, model_root) in enumerate(self.all_root_path.items()):
             output_image_list = list()
-            for item in self.spotframe_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
+            for item in self.spotedit_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
                 if idx == 0:
                     if self.mode == 'syn':
                         gt_image_list.append(os.path.join(self.root_ref_image_path, str(item['edit_id']), item['image_list'][2].split('/')[-1]))
@@ -152,7 +153,7 @@ class SpotFrameMetric:
             output_image_list = list()
             ref_image_list = list()
             count = 0
-            for item in self.spotframe_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
+            for item in self.spotedit_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
                 
                 try:
                     output_image_list.append(self.grounded_segementor.get_detected_bbx(edit_type='cut_out', obj=item['target_obj'],
@@ -184,7 +185,7 @@ class SpotFrameMetric:
             output_image_list = list()
             input_image_list = list()
             count = 0
-            for item in self.spotframe_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
+            for item in self.spotedit_list[self.idx_dict['general'][0]:self.idx_dict['general'][1]]:
                 output_image_path=os.path.join(model_root, str(item['id']), item['image_list'][2].split('/')[-1])
                 try:
                     output_image_list.append(self.grounded_segementor.get_detected_bbx(edit_type='mask_out', obj=item['target_obj'],
@@ -236,19 +237,19 @@ if __name__ == "__main__":
     logging.getLogger("transformers").setLevel(logging.ERROR)
     args = parser.parse_args()
     print('==================', args.mode, args.eval, args.encoder, args.pool, '==================', flush=True)
-    spotframe_metric = SpotFrameMetric(mode=args.mode, encoder_name=args.encoder, pool=args.pool)
+    spotedit_metric = SpotEditMetric(mode=args.mode, encoder_name=args.encoder, pool=args.pool)
     if args.eval == 'rob':
-        spotframe_metric.calculate_hallu_score(robustness_type='input robustness')
-        spotframe_metric.calculate_robusntess_score(robustness_type='input robustness')
+        spotedit_metric.calculate_hallu_score(robustness_type='input robustness')
+        spotedit_metric.calculate_robusntess_score(robustness_type='input robustness')
         
-        spotframe_metric.calculate_hallu_score(robustness_type='ref robustness')
-        spotframe_metric.calculate_robusntess_score(robustness_type='ref robustness')
+        spotedit_metric.calculate_hallu_score(robustness_type='ref robustness')
+        spotedit_metric.calculate_robusntess_score(robustness_type='ref robustness')
 
     elif args.eval == 'stan':   
-        # spotframe_metric.calculate_gt_score()
-        spotframe_metric.calculate_object_consistency_score()
-        spotframe_metric.calculate_background_consistency_score()
+        spotedit_metric.calculate_gt_score()
+        spotedit_metric.calculate_object_consistency_score()
+        spotedit_metric.calculate_background_consistency_score()
         
     elif args.eval == 'dreamedit':
-        spotframe_metric.calculate_object_consistency_score()
-        spotframe_metric.calculate_background_consistency_score()
+        spotedit_metric.calculate_object_consistency_score()
+        spotedit_metric.calculate_background_consistency_score()
