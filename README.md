@@ -5,7 +5,7 @@
 
 <p align="center"> 
 <a href="https://github.com/SaraGhazanfari/SpotEdit"><img alt="Build" src="https://img.shields.io/badge/Project%20Page-SpotEdit-blue"></a> 
-<a href=""><img alt="Build" src="https://img.shields.io/badge/arXiv%20paper-SpotEdit-b31b1b.svg"></a>
+<a href="https://arxiv.org/pdf/2508.18159"><img alt="Build" src="https://img.shields.io/badge/arXiv%20paper-SpotEdit-b31b1b.svg"></a>
 <a href="https://huggingface.co/datasets/saraghznfri/SpotEditBench"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Hugging%20Face&message=Benchmark&color=yellow"></a>
 </p>
 
@@ -53,5 +53,14 @@ We sincerely thank the authors for releasing their models and code, which greatl
 <a name="bibtex"></a>
 ### Citation
 If you use our code or models, please consider citing our work using the following BibTex entry:
-```bibtex
+```
+@misc{ghazanfari2025spoteditevaluatingvisuallyguidedimage,
+      title={SpotEdit: Evaluating Visually-Guided Image Editing Methods}, 
+      author={Sara Ghazanfari and Wei-An Lin and Haitong Tian and Ersin Yumer},
+      year={2025},
+      eprint={2508.18159},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2508.18159}, 
+}
 ```
