@@ -54,13 +54,10 @@ We sincerely thank the authors for releasing their models and code, which greatl
 ### Citation
 If you use our code or models, please consider citing our work using the following BibTex entry:
 ```
-@misc{ghazanfari2025spoteditevaluatingvisuallyguidedimage,
-      title={SpotEdit: Evaluating Visually-Guided Image Editing Methods}, 
-      author={Sara Ghazanfari and Wei-An Lin and Haitong Tian and Ersin Yumer},
-      year={2025},
-      eprint={2508.18159},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2508.18159}, 
+@article{ghazanfari2025spotedit,
+  title={SpotEdit: Evaluating Visually-Guided Image Editing Methods},
+  author={Ghazanfari, Sara and Lin, Wei-An and Tian, Haitong and Yumer, Ersin},
+  journal={arXiv preprint arXiv:2508.18159},
+  year={2025}
 }
 ```
