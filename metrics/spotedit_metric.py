@@ -27,9 +27,9 @@ class SpotEditMetric:
                     'overall robustness': [210, 260]} 
             
         elif mode == 'real':   
-            self.idx_dict = {'general': [0, 180],
-                    'input robustness': [180, 230],
-                    'ref robustness': [230, 281]} 
+            self.idx_dict = {'general': [0, 189],
+                    'input robustness': [189, 239],
+                    'ref robustness': [239, 290]} 
             
         elif mode == 'dreamedit':
                                            
