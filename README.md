@@ -1,4 +1,4 @@
-# SpotEdit
+# SpotEdit [NeurIPS 2025 Workshop GenProCC]
 
 ## *Evaluating Visually-Guided Image Editing Methods* 
 
